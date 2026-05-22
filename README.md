@@ -1,6 +1,7 @@
 # Verdict
 
 > Your bank statement, on trial.
+> Most 'chat with your data' finance apps just summarize. Verdict creates tension — forcing two adversarial agents to argue surfaces insights that a neutral summarizer would average away. It's also a clean demo of multi-agent orchestration with real streaming UX.
 
 Upload a CSV bank export. Three AI agents debate it in open court:
 
