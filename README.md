@@ -1,7 +1,7 @@
 # Verdict
 
 > Any decision. On trial.
-
+![Verdict — homepage](public/screenshots/demo.png)
 Submit a decision in plain language, or upload a document — PDF, DOCX, or CSV.
 Three AI agents argue it before the bench:
 
