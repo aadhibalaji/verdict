@@ -2,20 +2,45 @@
 
 import { useCallback, useRef, useState } from "react";
 
-interface FileUploadProps {
-  onSubmit: (file: File) => void;
+interface SubmissionPayload {
+  question: string;
+  file: File | null;
 }
 
+interface FileUploadProps {
+  onSubmit: (payload: SubmissionPayload) => void;
+}
+
+const ACCEPT_EXT = [".pdf", ".docx", ".csv"];
+const ACCEPT_MIMES = [
+  "application/pdf",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "text/csv",
+  "application/vnd.ms-excel",
+];
+
+const QUESTION_EXAMPLES = [
+  "Should I quit my job and start the company?",
+  "Is this Brooklyn lease fair?",
+  "Should I move to New York?",
+  "Is this draft paper ready to submit?",
+  "Should I take the counter-offer or leave?",
+];
+
 export default function FileUpload({ onSubmit }: FileUploadProps) {
+  const [question, setQuestion] = useState("");
   const [file, setFile] = useState<File | null>(null);
   const [dragging, setDragging] = useState(false);
   const [hint, setHint] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const accept = useCallback((f: File | undefined | null) => {
+  const acceptFile = useCallback((f: File | undefined | null) => {
     if (!f) return;
-    if (!/\.csv$|text\/csv|application\/vnd\.ms-excel/i.test(f.name + " " + f.type)) {
-      setHint("That doesn't look like a CSV. The court accepts CSV exports only.");
+    const name = f.name.toLowerCase();
+    const extOk = ACCEPT_EXT.some((ext) => name.endsWith(ext));
+    const mimeOk = ACCEPT_MIMES.includes(f.type);
+    if (!extOk && !mimeOk) {
+      setHint("Unsupported file. The court accepts PDF, DOCX, or CSV.");
       setFile(null);
       return;
     }
@@ -27,54 +52,82 @@ export default function FileUpload({ onSubmit }: FileUploadProps) {
     (e: React.DragEvent<HTMLDivElement>) => {
       e.preventDefault();
       setDragging(false);
-      accept(e.dataTransfer.files?.[0]);
+      acceptFile(e.dataTransfer.files?.[0]);
     },
-    [accept],
+    [acceptFile],
   );
 
+  const canSubmit = question.trim().length > 0 || file !== null;
+
   return (
-    <div className="chamber-frame relative px-8 py-12">
+    <div className="chamber-frame relative px-6 py-10 sm:px-10">
       <span className="corner-ornament tl" aria-hidden />
       <span className="corner-ornament tr" aria-hidden />
       <span className="corner-ornament bl" aria-hidden />
       <span className="corner-ornament br" aria-hidden />
 
       <div className="text-center mb-8">
-        <div className="divider-flourish mb-6">Exhibit A</div>
-        <h2 className="font-display text-4xl text-ink-50 mb-2">Enter the Evidence</h2>
-        <p className="text-ink-200/80 font-serif-body italic text-lg">
-          Upload your bank statement as CSV. Nothing leaves this session except a summary sent to Claude.
+        <div className="divider-flourish mb-6">State the Matter</div>
+        <h2 className="font-display text-4xl text-ink-50 mb-2">Before the Court</h2>
+        <p className="text-ink-200/80 font-serif-body italic text-lg max-w-2xl mx-auto text-balance">
+          Describe the decision. Submit the evidence. Both, either, but not neither.
         </p>
       </div>
 
-      <div
-        onDragOver={(e) => {
-          e.preventDefault();
-          setDragging(true);
-        }}
-        onDragLeave={() => setDragging(false)}
-        onDrop={onDrop}
-        onClick={() => inputRef.current?.click()}
-        className={`cursor-pointer border border-dashed transition px-6 py-10 text-center select-none ${
-          dragging
-            ? "border-brass-400 bg-brass-400/5"
-            : "border-brass-400/30 hover:border-brass-400/60 hover:bg-brass-400/[0.03]"
-        }`}
-      >
-        <input
-          ref={inputRef}
-          type="file"
-          accept=".csv,text/csv"
-          className="hidden"
-          onChange={(e) => accept(e.target.files?.[0])}
-        />
-        <div className="text-brass-300 font-display text-2xl mb-1">
-          {file ? file.name : "Drop CSV here"}
-        </div>
-        <div className="text-xs tracking-[0.3em] text-ink-300/60">
-          {file
-            ? `${(file.size / 1024).toFixed(1)} KB · ready to enter into the record`
-            : "OR CLICK TO BROWSE"}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+        <QuestionField question={question} setQuestion={setQuestion} />
+
+        <div
+          onDragOver={(e) => {
+            e.preventDefault();
+            setDragging(true);
+          }}
+          onDragLeave={() => setDragging(false)}
+          onDrop={onDrop}
+          onClick={() => inputRef.current?.click()}
+          className={`relative cursor-pointer border border-dashed transition px-6 py-8 select-none flex flex-col ${
+            dragging
+              ? "border-brass-400 bg-brass-400/5"
+              : "border-brass-400/30 hover:border-brass-400/60 hover:bg-brass-400/[0.03]"
+          }`}
+        >
+          <div className="text-[0.6rem] tracking-[0.45em] text-brass-300/80 mb-2">
+            THE EVIDENCE
+          </div>
+          <input
+            ref={inputRef}
+            type="file"
+            accept={ACCEPT_EXT.join(",")}
+            className="hidden"
+            onChange={(e) => acceptFile(e.target.files?.[0])}
+          />
+          <div className="flex-1 flex flex-col items-center justify-center text-center py-4">
+            <div className="text-brass-300 font-display text-2xl leading-tight mb-1">
+              {file ? file.name : "Drop a document"}
+            </div>
+            <div className="text-xs tracking-[0.3em] text-ink-300/60">
+              {file
+                ? `${(file.size / 1024).toFixed(1)} KB · entered into the record`
+                : "PDF · DOCX · CSV"}
+            </div>
+            {!file && (
+              <div className="text-[0.55rem] tracking-[0.4em] text-ink-300/40 mt-3">
+                OR CLICK TO BROWSE
+              </div>
+            )}
+          </div>
+          {file && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                setFile(null);
+              }}
+              className="absolute top-3 right-3 text-[0.55rem] tracking-[0.4em] text-ink-300/60 hover:text-blood-400 transition"
+            >
+              REMOVE
+            </button>
+          )}
         </div>
       </div>
 
@@ -85,14 +138,14 @@ export default function FileUpload({ onSubmit }: FileUploadProps) {
       )}
 
       <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mt-8">
-        <div className="text-[0.6rem] tracking-[0.4em] text-ink-300/60">
-          MOST BANK CSV EXPORTS WORK · DATE / DESCRIPTION / AMOUNT
+        <div className="text-[0.6rem] tracking-[0.4em] text-ink-300/60 text-center sm:text-left">
+          ANY DECISION · LIFE · CAREER · CONTRACTS · WRITING · MONEY
         </div>
         <button
-          disabled={!file}
-          onClick={() => file && onSubmit(file)}
+          disabled={!canSubmit}
+          onClick={() => canSubmit && onSubmit({ question, file })}
           className={`group relative px-8 py-3 border tracking-[0.35em] text-xs transition ${
-            file
+            canSubmit
               ? "border-brass-400 text-brass-300 hover:bg-brass-400 hover:text-ink-900"
               : "border-ink-500/40 text-ink-400/60 cursor-not-allowed"
           }`}
@@ -103,76 +156,46 @@ export default function FileUpload({ onSubmit }: FileUploadProps) {
 
       <details className="mt-8 text-ink-300/70 text-sm">
         <summary className="cursor-pointer text-brass-300/80 tracking-[0.25em] text-xs">
-          NO CSV ON HAND? PASTE A SAMPLE.
+          NEED A STARTING POINT? TRY A SAMPLE QUESTION.
         </summary>
-        <SamplePaste onSubmit={onSubmit} />
+        <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-2">
+          {QUESTION_EXAMPLES.map((q) => (
+            <button
+              key={q}
+              type="button"
+              onClick={() => setQuestion(q)}
+              className="text-left border border-brass-400/20 hover:border-brass-400/60 hover:bg-brass-400/5 transition px-3 py-2 text-ink-100 font-serif-body italic"
+            >
+              “{q}”
+            </button>
+          ))}
+        </div>
       </details>
     </div>
   );
 }
 
-function SamplePaste({ onSubmit }: { onSubmit: (file: File) => void }) {
-  const [text, setText] = useState(SAMPLE_CSV);
+interface QuestionFieldProps {
+  question: string;
+  setQuestion: (s: string) => void;
+}
+
+function QuestionField({ question, setQuestion }: QuestionFieldProps) {
   return (
-    <div className="mt-4 space-y-3">
+    <div className="border border-brass-400/30 hover:border-brass-400/60 focus-within:border-brass-400/80 transition px-5 py-4 flex flex-col">
+      <div className="text-[0.6rem] tracking-[0.45em] text-brass-300/80 mb-2">
+        THE QUESTION
+      </div>
       <textarea
-        value={text}
-        onChange={(e) => setText(e.target.value)}
-        rows={8}
-        className="w-full bg-ink-800/60 border border-brass-400/20 text-ink-100 font-mono text-xs p-3 focus:outline-none focus:border-brass-400/60"
+        value={question}
+        onChange={(e) => setQuestion(e.target.value)}
+        rows={7}
+        placeholder={"Describe the decision or situation.\n\nExample: “Should I leave my job to write fiction full-time? I have 14 months of runway and one publishing offer.”"}
+        className="w-full flex-1 bg-transparent text-ink-50 font-serif-body text-lg leading-snug placeholder:text-ink-300/40 placeholder:italic focus:outline-none resize-none"
       />
-      <button
-        onClick={() => {
-          const blob = new Blob([text], { type: "text/csv" });
-          const file = new File([blob], "statement.csv", { type: "text/csv" });
-          onSubmit(file);
-        }}
-        className="px-5 py-2 border border-brass-400/60 text-brass-300 hover:bg-brass-400/10 transition tracking-[0.3em] text-xs"
-      >
-        USE THIS SAMPLE
-      </button>
+      <div className="text-[0.55rem] tracking-[0.4em] text-ink-300/40 mt-2">
+        PLAIN LANGUAGE · BE SPECIFIC · THE COURT REWARDS DETAIL
+      </div>
     </div>
   );
 }
-
-const SAMPLE_CSV = `Date,Description,Amount,Category
-2025-03-01,UBER EATS,-42.13,Food
-2025-03-01,SALARY ACME CORP,4200.00,Income
-2025-03-02,STARBUCKS #4421,-6.75,Coffee
-2025-03-02,AMAZON MARKETPLACE,-89.99,Shopping
-2025-03-03,STARBUCKS #4421,-7.20,Coffee
-2025-03-04,UBER TRIP,-22.40,Transport
-2025-03-05,WHOLE FOODS,-117.32,Groceries
-2025-03-05,DOORDASH,-38.50,Food
-2025-03-06,STARBUCKS #4421,-6.75,Coffee
-2025-03-06,NETFLIX,-15.49,Subscriptions
-2025-03-07,SPOTIFY,-9.99,Subscriptions
-2025-03-07,UBER TRIP,-18.10,Transport
-2025-03-08,LATE NIGHT TACO,-31.20,Food
-2025-03-08,AMAZON MARKETPLACE,-44.20,Shopping
-2025-03-09,RENT PAYMENT,-1850.00,Housing
-2025-03-10,STARBUCKS #4421,-6.75,Coffee
-2025-03-11,DOORDASH,-29.15,Food
-2025-03-12,UBER EATS,-26.80,Food
-2025-03-13,APPLE.COM/BILL,-2.99,Subscriptions
-2025-03-14,APPLE.COM/BILL,-9.99,Subscriptions
-2025-03-15,SALARY ACME CORP,4200.00,Income
-2025-03-15,VENMO TO ROOMMATE,-340.00,Bills
-2025-03-16,CVS PHARMACY,-23.18,Health
-2025-03-17,STARBUCKS #4421,-6.75,Coffee
-2025-03-18,UBER EATS,-37.40,Food
-2025-03-19,AMAZON MARKETPLACE,-67.30,Shopping
-2025-03-20,DOORDASH,-44.15,Food
-2025-03-21,BAR TAB DOWNTOWN,-92.00,Entertainment
-2025-03-22,UBER TRIP,-26.40,Transport
-2025-03-22,LATE NIGHT TACO,-19.80,Food
-2025-03-23,SUNDAY BRUNCH,-58.40,Food
-2025-03-24,STARBUCKS #4421,-7.20,Coffee
-2025-03-25,UBER EATS,-31.55,Food
-2025-03-26,GYM MEMBERSHIP,-39.00,Health
-2025-03-27,AMAZON MARKETPLACE,-21.10,Shopping
-2025-03-28,UBER TRIP,-15.80,Transport
-2025-03-29,WHOLE FOODS,-98.45,Groceries
-2025-03-30,DOORDASH,-33.20,Food
-2025-03-31,STARBUCKS #4421,-6.75,Coffee
-`;

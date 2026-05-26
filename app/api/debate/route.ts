@@ -11,14 +11,16 @@ import {
   type AgentRole,
   type AgentTurn,
 } from "@/lib/agents";
-import { parseStatement, summaryToBrief } from "@/lib/csv";
+import { situationToBrief } from "@/lib/csv";
+import { buildExhibit, detectFileKind, extractFile } from "@/lib/extract";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const MODEL = "claude-sonnet-4-20250514";
 const ROUNDS = 3;
-const MAX_CSV_BYTES = 2_000_000;
+const MAX_FILE_BYTES = 8_000_000;
+const MAX_QUESTION_CHARS = 8_000;
 
 export async function POST(req: NextRequest) {
   const apiKey = process.env.ANTHROPIC_API_KEY;
@@ -29,43 +31,60 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  let csvText: string;
+  let question: string | null = null;
+  let file: File | null = null;
+
   try {
     const contentType = req.headers.get("content-type") ?? "";
     if (contentType.includes("multipart/form-data")) {
       const form = await req.formData();
-      const file = form.get("file");
-      if (!(file instanceof File)) {
-        return badRequest("No CSV file was provided.");
+      const rawQuestion = form.get("question");
+      if (typeof rawQuestion === "string") {
+        question = rawQuestion;
       }
-      if (file.size > MAX_CSV_BYTES) {
-        return badRequest("That CSV is too large. 2MB max.");
+      const rawFile = form.get("file");
+      if (rawFile instanceof File && rawFile.size > 0) {
+        file = rawFile;
       }
-      csvText = await file.text();
     } else {
       const body = await req.json();
-      csvText = String(body.csv ?? "");
+      if (typeof body?.question === "string") question = body.question;
     }
-  } catch (e) {
-    return badRequest("Could not read the uploaded file.");
+  } catch {
+    return badRequest("Could not read the submission.");
   }
 
-  if (!csvText.trim()) {
-    return badRequest("The uploaded file appears to be empty.");
+  if (question && question.length > MAX_QUESTION_CHARS) {
+    return badRequest(`The petition is too long. Keep it under ${MAX_QUESTION_CHARS} characters.`);
   }
 
-  let parsed;
+  if (file) {
+    if (file.size > MAX_FILE_BYTES) {
+      return badRequest("That file is too large. 8MB max.");
+    }
+    if (!detectFileKind(file.name, file.type)) {
+      return badRequest("Unsupported file type. The court accepts PDF, DOCX, or CSV files only.");
+    }
+  }
+
+  if (!question?.trim() && !file) {
+    return badRequest("Describe a decision or upload a document — the court needs something to deliberate on.");
+  }
+
+  let exhibit;
   try {
-    parsed = parseStatement(csvText);
+    const extracted = file ? await extractFile(file) : null;
+    exhibit = buildExhibit({
+      question,
+      file: extracted,
+      fileName: file?.name ?? null,
+    });
   } catch (e) {
-    return badRequest("Could not parse that CSV. Make sure it has a header row with date, description, and amount columns.");
+    const message = e instanceof Error ? e.message : "Could not read that submission.";
+    return badRequest(message);
   }
 
-  if (parsed.transactions.length === 0) {
-    return badRequest("No transactions found. The CSV must include a header row and at least one row with a numeric amount.");
-  }
-
-  const brief = summaryToBrief(parsed.summary);
+  const brief = situationToBrief(exhibit);
   const client = new Anthropic({ apiKey });
 
   const encoder = new TextEncoder();
@@ -77,7 +96,7 @@ export async function POST(req: NextRequest) {
       };
 
       try {
-        send({ type: "summary", summary: parsed.summary });
+        send({ type: "summary", exhibit });
 
         const history: AgentTurn[] = [];
 

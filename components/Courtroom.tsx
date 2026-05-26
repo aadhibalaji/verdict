@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import type { StatementSummary } from "@/lib/csv";
+import type { Exhibit } from "@/lib/csv";
 
 import AgentBench from "./AgentBench";
 import ExhibitA from "./ExhibitA";
@@ -27,7 +27,7 @@ interface VerdictInfo {
 type Phase = "idle" | "loading" | "debating" | "verdict" | "error";
 
 const PHASE_LABELS: Record<Phase, string> = {
-  idle: "AWAITING EVIDENCE",
+  idle: "AWAITING THE PETITION",
   loading: "ENTERING THE CHAMBER",
   debating: "ARGUMENTS IN PROGRESS",
   verdict: "VERDICT DELIVERED",
@@ -37,7 +37,7 @@ const PHASE_LABELS: Record<Phase, string> = {
 export default function Courtroom() {
   const [phase, setPhase] = useState<Phase>("idle");
   const [error, setError] = useState<string | null>(null);
-  const [summary, setSummary] = useState<StatementSummary | null>(null);
+  const [exhibit, setExhibit] = useState<Exhibit | null>(null);
   const [turns, setTurns] = useState<TurnState[]>([]);
   const [currentRound, setCurrentRound] = useState(0);
   const [currentRole, setCurrentRole] = useState<Role | null>(null);
@@ -50,21 +50,26 @@ export default function Courtroom() {
 
   useEffect(() => () => abortRef.current?.abort(), []);
 
-  const handleStart = useCallback(async (file: File) => {
+  const handleStart = useCallback(async (payload: { question: string; file: File | null }) => {
     abortRef.current?.abort();
     const controller = new AbortController();
     abortRef.current = controller;
 
     setPhase("loading");
     setError(null);
-    setSummary(null);
+    setExhibit(null);
     setTurns([]);
     setCurrentRound(0);
     setCurrentRole(null);
     setVerdict(null);
 
     const formData = new FormData();
-    formData.append("file", file);
+    if (payload.question.trim()) {
+      formData.append("question", payload.question.trim());
+    }
+    if (payload.file) {
+      formData.append("file", payload.file);
+    }
 
     let response: Response;
     try {
@@ -73,7 +78,7 @@ export default function Courtroom() {
         body: formData,
         signal: controller.signal,
       });
-    } catch (e) {
+    } catch {
       setError("Could not reach the courthouse. Check your connection.");
       setPhase("error");
       return;
@@ -131,7 +136,7 @@ export default function Courtroom() {
       if (!event || typeof event !== "object") return;
       switch (event.type) {
         case "summary":
-          setSummary(event.summary as StatementSummary);
+          if (event.exhibit) setExhibit(event.exhibit as Exhibit);
           break;
         case "turn_start":
           setCurrentRole(event.role as Role);
@@ -178,7 +183,7 @@ export default function Courtroom() {
     abortRef.current?.abort();
     setPhase("idle");
     setError(null);
-    setSummary(null);
+    setExhibit(null);
     setTurns([]);
     setCurrentRound(0);
     setCurrentRole(null);
@@ -193,13 +198,16 @@ export default function Courtroom() {
 
       <header className="relative max-w-6xl mx-auto text-center mb-10">
         <div className="text-[0.65rem] tracking-[0.5em] text-brass-400/80 mb-3 chamber-lamp">
-          THE COURT OF PERSONAL FINANCE
+          THE COURT OF DECISIONS
         </div>
         <h1 className="font-display text-6xl sm:text-7xl md:text-8xl text-ink-50 tracking-tight leading-none">
           <span className="text-balance">Verdict</span>
         </h1>
         <p className="font-serif-body italic text-ink-200/80 mt-4 text-lg sm:text-xl max-w-2xl mx-auto text-balance">
-          Your bank statement, on trial. Three agents argue. One delivers the sentence.
+          Any decision. On trial.
+        </p>
+        <p className="font-serif-body text-ink-300/70 mt-2 text-base sm:text-lg max-w-2xl mx-auto text-balance">
+          Life choices, career moves, assignment grades, money. Submit the matter and three agents will argue it before the bench.
         </p>
         <div className="mt-6 text-[0.6rem] tracking-[0.45em] text-brass-300/70">
           {PHASE_LABELS[phase]}
@@ -212,7 +220,7 @@ export default function Courtroom() {
       </header>
 
       {phase === "idle" && (
-        <section className="relative max-w-3xl mx-auto">
+        <section className="relative max-w-4xl mx-auto">
           <FileUpload onSubmit={handleStart} />
         </section>
       )}
@@ -235,7 +243,7 @@ export default function Courtroom() {
 
       {(phase === "loading" || phase === "debating" || phase === "verdict") && (
         <section className="relative max-w-7xl mx-auto space-y-8">
-          {summary && <ExhibitA summary={summary} />}
+          {exhibit && <ExhibitA exhibit={exhibit} />}
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <AgentBench
@@ -282,7 +290,7 @@ export default function Courtroom() {
       )}
 
       <footer className="relative text-center mt-16 text-[0.6rem] tracking-[0.4em] text-ink-400/60">
-        BUILT WITH ANTHROPIC CLAUDE — NO FINANCIAL ADVICE IS RENDERED IN THIS CHAMBER
+        BUILT WITH ANTHROPIC CLAUDE — NO ADVICE RENDERED IN THIS CHAMBER IS LEGALLY BINDING
       </footer>
     </main>
   );

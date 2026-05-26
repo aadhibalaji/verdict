@@ -23,7 +23,7 @@ const mono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Verdict — your bank statement on trial",
+  title: "Verdict — anything on trial",
   description:
     "Upload a CSV bank export. Three AI agents — the Pessimist, the Optimist, and the Judge — debate your spending in open court.",
 };

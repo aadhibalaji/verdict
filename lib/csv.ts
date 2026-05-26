@@ -216,6 +216,50 @@ export function formatCurrency(n: number): string {
   })}`;
 }
 
+export type Exhibit =
+  | { kind: "summary"; summary: StatementSummary; question: string | null; fileName: string }
+  | { kind: "text"; text: string; source: "pdf" | "docx" | "text"; question: string | null; fileName: string | null };
+
+export function situationToBrief(exhibit: Exhibit): string {
+  const lines: string[] = [];
+
+  if (exhibit.question && exhibit.question.trim()) {
+    lines.push(`EXHIBIT A — THE QUESTION BEFORE THE COURT`);
+    lines.push(exhibit.question.trim());
+    lines.push("");
+  }
+
+  if (exhibit.kind === "summary") {
+    const headerLabel = exhibit.question ? "EXHIBIT B" : "EXHIBIT A";
+    lines.push(`${headerLabel} — STATEMENT BRIEF (${exhibit.fileName})`);
+    const rawBrief = summaryToBrief(exhibit.summary);
+    const newlineIdx = rawBrief.indexOf("\n");
+    lines.push(newlineIdx >= 0 ? rawBrief.slice(newlineIdx + 1) : rawBrief);
+  } else if (exhibit.kind === "text") {
+    if (exhibit.text.trim()) {
+      const headerLabel = exhibit.question ? "EXHIBIT B" : "EXHIBIT A";
+      const sourceLabel =
+        exhibit.source === "pdf"
+          ? "EVIDENCE (PDF)"
+          : exhibit.source === "docx"
+            ? "EVIDENCE (DOCX)"
+            : "THE PETITIONER'S OWN WORDS";
+      const fileNote = exhibit.fileName ? ` — ${exhibit.fileName}` : "";
+      lines.push(`${headerLabel} — ${sourceLabel}${fileNote}`);
+      lines.push(truncateText(exhibit.text.trim(), 24000));
+    }
+  }
+
+  return lines.join("\n").trim();
+}
+
+function truncateText(text: string, maxChars: number): string {
+  if (text.length <= maxChars) return text;
+  const head = text.slice(0, Math.floor(maxChars * 0.8));
+  const tail = text.slice(-Math.floor(maxChars * 0.15));
+  return `${head}\n\n[…document truncated for length — ${text.length.toLocaleString()} chars total…]\n\n${tail}`;
+}
+
 export function summaryToBrief(summary: StatementSummary): string {
   const lines: string[] = [];
   lines.push(`EXHIBIT A — STATEMENT BRIEF`);
