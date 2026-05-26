@@ -1,9 +1,11 @@
 # Verdict
 
 > Any decision. On trial.
-![Verdict — homepage](public/screenshots/demo.png)
+
 Submit a decision in plain language, or upload a document — PDF, DOCX, or CSV.
 Three AI agents argue it before the bench:
+
+![Verdict — homepage](public/screenshots/demo.png)
 
 - **The Pessimist** — prosecution. Finds every flaw, risk, and red flag.
 - **The Optimist** — defense. Reframes the case and defends the human behind it.
