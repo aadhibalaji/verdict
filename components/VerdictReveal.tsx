@@ -15,7 +15,7 @@ export default function VerdictReveal({ verdict, onReset }: VerdictRevealProps) 
       <span className="corner-ornament bl" aria-hidden />
       <span className="corner-ornament br" aria-hidden />
 
-      <div className="divider-flourish mb-6">The Sentence</div>
+      <div className="divider-flourish mb-6">The Verdict on Your Application</div>
 
       {verdict ? (
         <>
@@ -31,7 +31,7 @@ export default function VerdictReveal({ verdict, onReset }: VerdictRevealProps) 
         </>
       ) : (
         <p className="font-serif-body italic text-ink-200 text-xl">
-          The Judge declined to issue a formal label, but the verdict above stands as written.
+          The Judge declined to issue a formal tier, but the verdict above stands as written.
         </p>
       )}
 
@@ -49,8 +49,8 @@ export default function VerdictReveal({ verdict, onReset }: VerdictRevealProps) 
 
 function toneFor(label: string): { text: string } {
   const upper = label.toUpperCase();
-  if (upper.includes("NOT GUILTY")) return { text: "text-verdure-400" };
-  if (upper.includes("MERCY")) return { text: "text-brass-300" };
-  if (upper.includes("GUILTY")) return { text: "text-blood-400" };
+  if (upper.includes("LIKELY")) return { text: "text-verdure-400" };
+  if (upper.includes("TARGET")) return { text: "text-brass-300" };
+  if (upper.includes("REACH")) return { text: "text-blood-400" };
   return { text: "text-brass-300" };
 }
