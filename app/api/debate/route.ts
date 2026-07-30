@@ -17,7 +17,7 @@ import { buildExhibit, detectFileKind, extractFile } from "@/lib/extract";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const MODEL = "claude-sonnet-4-20250514";
+const MODEL = "claude-sonnet-5";
 const ROUNDS = 3;
 const MAX_FILE_BYTES = 8_000_000;
 const MAX_QUESTION_CHARS = 8_000;
