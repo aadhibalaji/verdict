@@ -11,8 +11,13 @@ import {
   type AgentRole,
   type AgentTurn,
 } from "@/lib/agents";
-import { situationToBrief } from "@/lib/csv";
-import { buildExhibit, detectFileKind, extractFile } from "@/lib/extract";
+import {
+  applicationToBrief,
+  buildApplicationExhibit,
+  type EssayInput,
+  type ExtracurricularInput,
+} from "@/lib/college-application";
+import { detectFileKind, extractFile } from "@/lib/extract";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -20,71 +25,108 @@ export const dynamic = "force-dynamic";
 const MODEL = "claude-sonnet-5";
 const ROUNDS = 3;
 const MAX_FILE_BYTES = 8_000_000;
-const MAX_QUESTION_CHARS = 8_000;
+const MAX_SCHOOL_CHARS = 200;
 
 export async function POST(req: NextRequest) {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
-    return new Response(
-      JSON.stringify({ error: "ANTHROPIC_API_KEY is not set on the server." }),
-      { status: 500, headers: { "Content-Type": "application/json" } },
-    );
+    return badRequestJson("ANTHROPIC_API_KEY is not set on the server.", 500);
   }
 
-  let question: string | null = null;
-  let file: File | null = null;
+  const contentType = req.headers.get("content-type") ?? "";
+  if (!contentType.includes("multipart/form-data")) {
+    return badRequest("Expected a multipart form submission.");
+  }
 
+  let form: FormData;
   try {
-    const contentType = req.headers.get("content-type") ?? "";
-    if (contentType.includes("multipart/form-data")) {
-      const form = await req.formData();
-      const rawQuestion = form.get("question");
-      if (typeof rawQuestion === "string") {
-        question = rawQuestion;
-      }
-      const rawFile = form.get("file");
-      if (rawFile instanceof File && rawFile.size > 0) {
-        file = rawFile;
-      }
-    } else {
-      const body = await req.json();
-      if (typeof body?.question === "string") question = body.question;
-    }
+    form = await req.formData();
   } catch {
     return badRequest("Could not read the submission.");
   }
 
-  if (question && question.length > MAX_QUESTION_CHARS) {
-    return badRequest(`The petition is too long. Keep it under ${MAX_QUESTION_CHARS} characters.`);
+  const school = String(form.get("school") ?? "").trim();
+  if (!school) {
+    return badRequest("A target school is required.");
+  }
+  if (school.length > MAX_SCHOOL_CHARS) {
+    return badRequest(`Target school name is too long. Keep it under ${MAX_SCHOOL_CHARS} characters.`);
   }
 
-  if (file) {
-    if (file.size > MAX_FILE_BYTES) {
-      return badRequest("That file is too large. 8MB max.");
-    }
-    if (!detectFileKind(file.name, file.type)) {
-      return badRequest("Unsupported file type. The court accepts PDF, DOCX, or CSV files only.");
+  let extracurriculars: ExtracurricularInput[] = [];
+  const rawExtracurriculars = form.get("extracurriculars");
+  if (typeof rawExtracurriculars === "string" && rawExtracurriculars.trim()) {
+    try {
+      const parsed = JSON.parse(rawExtracurriculars);
+      if (Array.isArray(parsed)) {
+        extracurriculars = parsed.map((ec) => ({
+          activity: String(ec?.activity ?? ""),
+          role: String(ec?.role ?? ""),
+          years: String(ec?.years ?? ""),
+          hoursPerWeek: String(ec?.hoursPerWeek ?? ""),
+          weeksPerYear: String(ec?.weeksPerYear ?? ""),
+        }));
+      }
+    } catch {
+      return badRequest("Could not read the extracurricular record.");
     }
   }
 
-  if (!question?.trim() && !file) {
-    return badRequest("Describe a decision or upload a document — the court needs something to deliberate on.");
+  const essayCount = Number(form.get("essayCount") ?? 0);
+  const essays: EssayInput[] = [];
+  for (let i = 0; i < essayCount; i++) {
+    const label = String(form.get(`essay_label_${i}`) ?? `Essay ${i + 1}`);
+    const rawText = form.get(`essay_text_${i}`);
+    const rawFile = form.get(`essay_file_${i}`);
+
+    if (rawFile instanceof File && rawFile.size > 0) {
+      if (rawFile.size > MAX_FILE_BYTES) {
+        return badRequest(`"${label}" is too large. 8MB max.`);
+      }
+      if (!detectFileKind(rawFile.name, rawFile.type)) {
+        return badRequest(`"${label}" is an unsupported file type. PDF, DOCX, or TXT only.`);
+      }
+      try {
+        const extracted = await extractFile(rawFile);
+        essays.push({ label, text: extracted.text });
+      } catch (e) {
+        const message = e instanceof Error ? e.message : `Could not read "${label}".`;
+        return badRequest(message);
+      }
+    } else if (typeof rawText === "string") {
+      essays.push({ label, text: rawText });
+    }
+  }
+
+  let resumeText: string | null = null;
+  let resumeFileName: string | null = null;
+  const resumeFile = form.get("resume");
+  if (resumeFile instanceof File && resumeFile.size > 0) {
+    if (resumeFile.size > MAX_FILE_BYTES) {
+      return badRequest("Resume file is too large. 8MB max.");
+    }
+    if (!detectFileKind(resumeFile.name, resumeFile.type)) {
+      return badRequest("Unsupported resume file type. PDF, DOCX, or TXT only.");
+    }
+    try {
+      const extracted = await extractFile(resumeFile);
+      resumeText = extracted.text;
+      resumeFileName = resumeFile.name;
+    } catch (e) {
+      const message = e instanceof Error ? e.message : "Could not read the resume.";
+      return badRequest(message);
+    }
   }
 
   let exhibit;
   try {
-    const extracted = file ? await extractFile(file) : null;
-    exhibit = buildExhibit({
-      question,
-      file: extracted,
-      fileName: file?.name ?? null,
-    });
+    exhibit = buildApplicationExhibit({ school, essays, extracurriculars, resumeText, resumeFileName });
   } catch (e) {
-    const message = e instanceof Error ? e.message : "Could not read that submission.";
+    const message = e instanceof Error ? e.message : "Could not build the application file.";
     return badRequest(message);
   }
 
-  const brief = situationToBrief(exhibit);
+  const brief = applicationToBrief(exhibit);
   const client = new Anthropic({ apiKey });
 
   const encoder = new TextEncoder();
@@ -200,8 +242,12 @@ function extractVerdict(text: string): { label: string; line: string } | null {
 }
 
 function badRequest(message: string) {
+  return badRequestJson(message, 400);
+}
+
+function badRequestJson(message: string, status: number) {
   return new Response(JSON.stringify({ error: message }), {
-    status: 400,
+    status,
     headers: { "Content-Type": "application/json" },
   });
 }

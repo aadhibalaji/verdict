@@ -12,7 +12,6 @@
     "@anthropic-ai/sdk": "^0.27.3",
     "mammoth": "^1.12.0",
     "next": "14.2.15",
-    "papaparse": "^5.4.1",
     "pdf-parse": "^2.4.5",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
@@ -20,7 +19,6 @@
   },
   "devDependencies": {
     "@types/node": "^20.16.10",
-    "@types/papaparse": "^5.3.14",
     "@types/pdf-parse": "^1.1.5",
     "@types/react": "^18.3.11",
     "@types/react-dom": "^18.3.0",

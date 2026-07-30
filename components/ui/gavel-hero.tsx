@@ -2,7 +2,7 @@
 
 import React, { useRef, useEffect, Suspense } from "react";
 import * as THREE from "three";
-import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
+import { mergeGeometries, mergeVertices } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 
 // Builds a stylized gavel silhouette: a barrel-shaped head sitting on a
 // slender handle, merged into a single BufferGeometry so the existing
@@ -23,8 +23,13 @@ function createGavelGeometry() {
   handleGeometry.translate(0, -0.85, 0);
 
   const merged = mergeGeometries([headGeometry, handleGeometry]);
-  merged.computeVertexNormals();
-  return merged;
+  // CylinderGeometry builds its flat end-caps as separate vertices from the
+  // curved wall at the same position but with different normals. Left
+  // unwelded, the per-vertex noise displacement pushes cap and wall apart
+  // along their differing normals, showing up as a gap at the seam.
+  const welded = mergeVertices(merged);
+  welded.computeVertexNormals();
+  return welded;
 }
 
 function createSoundBlockGeometry() {
@@ -60,7 +65,7 @@ export function GavelArtScene() {
         time: { value: 0 },
         pointLightPos: { value: new THREE.Vector3(0, 0, 5) },
         color: { value: new THREE.Color("#e4c170") },
-        impactPulse: { value: 0 },
+        glow: { value: 0 },
       },
       vertexShader: `
                 uniform float time;
@@ -120,14 +125,21 @@ export function GavelArtScene() {
                     // Lower amplitude / higher frequency than the original blob:
                     // this reads as a subtle "energy shimmer" on the surface
                     // instead of deforming the gavel silhouette out of shape.
-                    float displacement = snoise(position * 3.5 + time * 0.5) * 0.045;
+                    float slowWave = snoise(position * 1.2 + time * 0.18) * 0.09;
+                    float fineShimmer = snoise(position * 3.5 + time * 0.5) * 0.035;
+                    float displacement = slowWave + fineShimmer;
+                    // The handle runs along the y-axis with a small radius (~0.11-0.16),
+                    // while the head extends out to |x| ~0.8 — use that to damp the
+                    // shimmer on the handle without needing separate geometry.
+                    float headFactor = smoothstep(0.15, 0.35, abs(position.x));
+                    displacement *= mix(0.4, 1.0, headFactor);
                     vec3 newPosition = position + normal * displacement;
                     gl_Position = projectionMatrix * modelViewMatrix * vec4(newPosition, 1.0);
                 }`,
       fragmentShader: `
                 uniform vec3 color;
                 uniform vec3 pointLightPos;
-                uniform float impactPulse;
+                uniform float glow;
                 varying vec3 vNormal;
                 varying vec3 vPosition;
 
@@ -137,10 +149,10 @@ export function GavelArtScene() {
                     float diffuse = max(dot(normal, lightDir), 0.0);
 
                     float fresnel = 1.0 - dot(normal, vec3(0.0, 0.0, 1.0));
-                    fresnel = pow(fresnel, 2.0);
+                    fresnel = pow(fresnel, 1.6);
 
                     vec3 finalColor = color * diffuse + color * fresnel * 0.5;
-                    finalColor *= 1.0 + impactPulse * 0.8;
+                    finalColor *= 1.0 + glow * 0.8;
 
                     gl_FragColor = vec4(finalColor, 1.0);
                 }`,
@@ -149,7 +161,7 @@ export function GavelArtScene() {
     // Lifts the gavel + block up off-center so they sit above the title
     // text, which is anchored to the bottom of the hero section.
     const rig = new THREE.Group();
-    rig.position.set(0, 1.4, 0);
+    rig.position.set(0, 0.75, 0); // tune this to sit just above the title
     scene.add(rig);
 
     // Shrinks the whole gavel + block so its silhouette clears the title
@@ -160,18 +172,51 @@ export function GavelArtScene() {
 
     const pivotX = 1.3; // shifts the whole gavel group to the right
     const pivotY = -1.95; // bottom tip of the handle in mesh-local space
-    const armLength = 2.5; // approx pivot-to-head-center distance
+    const armLength = 2.5; // approx pivot-to-head-center distance — calibrated to match the real gavel geometry below, don't shrink this alone or the block drifts away from the head
     const idleAngle = -0.7; // small gap, leaning left toward the block
-    const strikeAngle = -0.85; // slightly further left — this is where it touches
-    const raisedAngle = 1.4; // ~120° swing back to the right from idle
+    const strikeAngle = -0.85; // slightly further left, used only to place the block
+
+    // Only the gavel turntable-spins. spinGroup/content recenters the gavel's
+    // own silhouette onto its own centroid below, so it rotates in place
+    // instead of orbiting the pivot it was originally drawn around.
+    const spinGroup = new THREE.Group();
+    scaleRig.add(spinGroup);
+    const content = new THREE.Group();
+    spinGroup.add(content);
 
     const gavelPivot = new THREE.Group();
     gavelPivot.position.set(pivotX, pivotY, 0); // pivot at the grip end, not the head/handle junction
-    scaleRig.add(gavelPivot);
+    content.add(gavelPivot);
+
+    const meshPosition: [number, number, number] = [0, -pivotY, 0]; // cancels the pivot offset so nothing visually jumps
+
+    // Dim solid fill for the wireframe to sit on top of.
+    const fillMaterial = new THREE.MeshBasicMaterial({
+      color: new THREE.Color("#e4c170"),
+      transparent: true,
+      opacity: 0.06,
+      side: THREE.DoubleSide,
+    });
+    const fillMesh = new THREE.Mesh(geometry, fillMaterial);
+    fillMesh.position.set(...meshPosition);
+    gavelPivot.add(fillMesh);
+
+    // Slightly larger glow shell behind everything for a soft outer edge.
+    const glowGeometry = geometry.clone();
+    glowGeometry.scale(1.04, 1.04, 1.04);
+    const glowMaterial = new THREE.MeshBasicMaterial({
+      color: new THREE.Color("#e4c170"),
+      transparent: true,
+      opacity: 0.08,
+      wireframe: true,
+    });
+    const glowMesh = new THREE.Mesh(glowGeometry, glowMaterial);
+    glowMesh.position.set(...meshPosition);
+    gavelPivot.add(glowMesh);
 
     const mesh = new THREE.Mesh(geometry, material);
-    mesh.position.set(0, -pivotY, 0); // cancels the pivot offset so nothing visually jumps
-    gavelPivot.add(mesh);
+    mesh.position.set(...meshPosition);
+    gavelPivot.add(mesh); // added last so the wireframe draws on top, crispest of the three
 
     // Invisible, generously-sized proxy for pointer hit-testing — the real
     // gavel geometry (thin handle, narrow head) is too small a target to
@@ -183,8 +228,10 @@ export function GavelArtScene() {
     mesh.add(hitbox);
 
     const blockGeometry = createSoundBlockGeometry();
+    const blockBaseColor = new THREE.Color("#9c7a3c");
+    const blockGlowColor = new THREE.Color("#e4c170");
     const blockMaterial = new THREE.MeshBasicMaterial({
-      color: new THREE.Color("#9c7a3c"),
+      color: blockBaseColor.clone(),
       wireframe: true,
     });
     const blockHalfHeight = 0.15; // half the block's actual height
@@ -194,98 +241,57 @@ export function GavelArtScene() {
       pivotY + Math.cos(strikeAngle) * armLength - blockHalfHeight,
       0
     );
+    soundBlock.position.x += 1.5; // nudged right three times — no real "inches" in this 3D scene, tune this number
+    // Static: not part of spinGroup, so it never orbits or translates. It
+    // still spins on its own axis in the animation loop below.
     scaleRig.add(soundBlock);
+
+    gavelPivot.rotation.z = idleAngle; // static resting tilt, no more swing
+
+    // Recenter the gavel's own silhouette onto spinGroup's own origin, so
+    // spinGroup.position below places the gavel by its visual center rather
+    // than by the arbitrary pivot it was drawn around.
+    content.updateMatrixWorld(true);
+    const contentBox = new THREE.Box3().setFromObject(content);
+    const contentCenter = spinGroup.worldToLocal(contentBox.getCenter(new THREE.Vector3()));
+    content.position.sub(contentCenter);
+
+    // Nudge the gavel diagonally down (spinGroup's own position, since the
+    // recenter above locks the gavel's screen position to it) so its head
+    // sits just above the block, and drop the block down to match.
+    spinGroup.position.add(new THREE.Vector3(-0.3, -0.85, 0));
+    soundBlock.position.y += -0.5;
 
     const pointLight = new THREE.PointLight(0xffffff, 1, 100);
     pointLight.position.set(0, 0, 5);
     lightRef.current = pointLight;
     scene.add(pointLight);
 
-    let state: "idle" | "dragging" | "falling" | "returning" = "idle";
-    let angle = idleAngle; // current tilt, in radians
-    let targetAngle = idleAngle; // where drag is pulling angle toward, eased in animate()
-    let velocity = 0; // angular velocity, for the drop
-    let impactFlash = 0;
-
     const raycaster = new THREE.Raycaster();
     const pointer = new THREE.Vector2();
+    let gavelGlow = 0;
+    let blockGlow = 0;
 
-    function toNDC(e: PointerEvent) {
+    const handleHoverMove = (e: PointerEvent) => {
       pointer.x = (e.clientX / window.innerWidth) * 2 - 1;
       pointer.y = -(e.clientY / window.innerHeight) * 2 + 1;
-    }
-
-    // Projects the pointer into the z=0 plane the gavel swings in, so drag
-    // tracking is based on where the cursor actually is in world space
-    // rather than raw screen-space mouse delta.
-    function pointerWorldPosition(e: PointerEvent) {
-      const ndcX = (e.clientX / window.innerWidth) * 2 - 1;
-      const ndcY = -(e.clientY / window.innerHeight) * 2 + 1;
-      const vec = new THREE.Vector3(ndcX, ndcY, 0.5).unproject(camera);
-      const dir = vec.sub(camera.position).normalize();
-      const dist = (0 - camera.position.z) / dir.z;
-      return camera.position.clone().add(dir.multiplyScalar(dist));
-    }
-
-    const handlePointerDown = (e: PointerEvent) => {
-      toNDC(e);
       raycaster.setFromCamera(pointer, camera);
-      const hits = raycaster.intersectObject(hitbox);
-      if (state === "idle" && hits.length > 0) {
-        state = "dragging";
-        currentMount.style.cursor = "grabbing";
-      }
+      gavelGlow = raycaster.intersectObject(hitbox).length > 0 ? 1 : 0;
+      blockGlow = raycaster.intersectObject(soundBlock).length > 0 ? 1 : 0;
+      currentMount.style.cursor = gavelGlow || blockGlow ? "pointer" : "default";
     };
 
-    const handlePointerMoveDrag = (e: PointerEvent) => {
-      if (state !== "dragging") return;
-      const worldPos = pointerWorldPosition(e);
-      const dx = worldPos.x - pivotX;
-      const dy = worldPos.y - pivotY;
-      targetAngle = Math.max(idleAngle, Math.min(raisedAngle, Math.atan2(dx, -dy))); // clamp within the allowed swing
-      velocity = 0;
-    };
-
-    const handlePointerUp = () => {
-      if (state === "dragging") {
-        state = "falling";
-        velocity = 0;
-        currentMount.style.cursor = "grab";
-      }
-    };
-
-    renderer.domElement.addEventListener("pointerdown", handlePointerDown);
-    window.addEventListener("pointermove", handlePointerMoveDrag);
-    window.addEventListener("pointerup", handlePointerUp);
-    currentMount.style.cursor = "grab";
+    window.addEventListener("pointermove", handleHoverMove);
 
     let frameId: number;
     const animate = (t: number) => {
       material.uniforms.time.value = t * 0.0003;
 
-      if (state === "dragging") {
-        angle += (targetAngle - angle) * 0.35; // higher = snappier, lower = smoother/laggier
-      } else if (state === "falling") {
-        velocity -= 0.006; // gravity, pulling toward strikeAngle
-        angle += velocity;
-        if (angle <= strikeAngle) {
-          angle = strikeAngle;
-          velocity *= -0.25; // small bounce off the block
-          if (Math.abs(velocity) < 0.002) state = "returning";
-          impactFlash = 1;
-        }
-      } else if (state === "returning") {
-        angle += (idleAngle - angle) * 0.08; // ease back up to the idle gap
-        if (Math.abs(idleAngle - angle) < 0.005) {
-          angle = idleAngle;
-          state = "idle";
-        }
-      }
+      // Gavel is fixed in place at its resting angle — no spin.
+      soundBlock.rotation.y += 0.006; // spins in place — position never changes
 
-      gavelPivot.rotation.z = angle;
-
-      impactFlash *= 0.9;
-      material.uniforms.impactPulse.value = impactFlash;
+      material.uniforms.glow.value += (gavelGlow - material.uniforms.glow.value) * 0.1;
+      blockMaterial.color.lerp(blockGlow ? blockGlowColor : blockBaseColor, 0.1);
 
       renderer.render(scene, camera);
       frameId = requestAnimationFrame(animate);
@@ -316,12 +322,13 @@ export function GavelArtScene() {
       cancelAnimationFrame(frameId);
       window.removeEventListener("resize", handleResize);
       window.removeEventListener("mousemove", handleMouseMove);
-      renderer.domElement.removeEventListener("pointerdown", handlePointerDown);
-      window.removeEventListener("pointermove", handlePointerMoveDrag);
-      window.removeEventListener("pointerup", handlePointerUp);
+      window.removeEventListener("pointermove", handleHoverMove);
       currentMount.removeChild(renderer.domElement);
       geometry.dispose();
       material.dispose();
+      fillMaterial.dispose();
+      glowGeometry.dispose();
+      glowMaterial.dispose();
       hitboxGeometry.dispose();
       hitboxMaterial.dispose();
       blockGeometry.dispose();
@@ -357,7 +364,7 @@ export function GavelHero({
 
       <div className="absolute inset-0 bg-gradient-to-t from-black via-black/70 to-transparent z-10 pointer-events-none" />
 
-      <div className="relative z-20 flex flex-col items-center justify-end h-full pb-20 md:pb-32 text-center px-4 pointer-events-none">
+      <div className="relative z-20 flex flex-col items-center justify-end h-full pb-14 md:pb-24 text-center px-4 pointer-events-none">
         {eyebrow && (
           <h2 className="text-sm font-mono tracking-widest text-[#e4c170]/80 uppercase">
             {eyebrow}
