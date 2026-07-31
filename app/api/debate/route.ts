@@ -5,18 +5,19 @@ import {
   buildJudgeUser,
   buildOptimistUser,
   buildPessimistUser,
-  JUDGE_SYSTEM,
-  OPTIMIST_SYSTEM,
-  PESSIMIST_SYSTEM,
+  judgeSystem,
+  optimistSystem,
+  pessimistSystem,
   type AgentRole,
   type AgentTurn,
 } from "@/lib/agents";
 import {
-  applicationToBrief,
-  buildApplicationExhibit,
-  type EssayInput,
+  buildEssayExhibit,
+  essayToBrief,
   type ExtracurricularInput,
-} from "@/lib/college-application";
+  type PastAssignmentInput,
+  type Purpose,
+} from "@/lib/essay-evaluation";
 import { detectFileKind, extractFile } from "@/lib/extract";
 
 export const runtime = "nodejs";
@@ -25,7 +26,9 @@ export const dynamic = "force-dynamic";
 const MODEL = "claude-sonnet-5";
 const ROUNDS = 3;
 const MAX_FILE_BYTES = 8_000_000;
-const MAX_SCHOOL_CHARS = 200;
+const MAX_SHORT_FIELD_CHARS = 200;
+
+const PURPOSES: Purpose[] = ["college", "assignment", "scholarship", "other"];
 
 export async function POST(req: NextRequest) {
   const apiKey = process.env.ANTHROPIC_API_KEY;
@@ -45,12 +48,36 @@ export async function POST(req: NextRequest) {
     return badRequest("Could not read the submission.");
   }
 
-  const school = String(form.get("school") ?? "").trim();
-  if (!school) {
-    return badRequest("A target school is required.");
+  const purpose = String(form.get("purpose") ?? "") as Purpose;
+  if (!PURPOSES.includes(purpose)) {
+    return badRequest("A valid purpose is required.");
   }
-  if (school.length > MAX_SCHOOL_CHARS) {
-    return badRequest(`Target school name is too long. Keep it under ${MAX_SCHOOL_CHARS} characters.`);
+
+  const prompt = String(form.get("prompt") ?? "");
+  const context = String(form.get("context") ?? "");
+
+  let essayText: string;
+  try {
+    essayText = await readTextOrFile(form, "essay", "essay");
+  } catch (e) {
+    return badRequest(e instanceof Error ? e.message : "Could not read the essay.");
+  }
+
+  let rubric: string;
+  try {
+    rubric = await readTextOrFile(form, "rubric", "rubric");
+  } catch (e) {
+    return badRequest(e instanceof Error ? e.message : "Could not read the rubric.");
+  }
+
+  const school = String(form.get("school") ?? "").trim();
+  if (purpose === "college" && school.length > MAX_SHORT_FIELD_CHARS) {
+    return badRequest(`Target school name is too long. Keep it under ${MAX_SHORT_FIELD_CHARS} characters.`);
+  }
+
+  const scholarshipName = String(form.get("scholarshipName") ?? "").trim();
+  if (purpose === "scholarship" && scholarshipName.length > MAX_SHORT_FIELD_CHARS) {
+    return badRequest(`Scholarship name is too long. Keep it under ${MAX_SHORT_FIELD_CHARS} characters.`);
   }
 
   let extracurriculars: ExtracurricularInput[] = [];
@@ -72,61 +99,57 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  const essayCount = Number(form.get("essayCount") ?? 0);
-  const essays: EssayInput[] = [];
-  for (let i = 0; i < essayCount; i++) {
-    const label = String(form.get(`essay_label_${i}`) ?? `Essay ${i + 1}`);
-    const rawText = form.get(`essay_text_${i}`);
-    const rawFile = form.get(`essay_file_${i}`);
-
-    if (rawFile instanceof File && rawFile.size > 0) {
-      if (rawFile.size > MAX_FILE_BYTES) {
-        return badRequest(`"${label}" is too large. 8MB max.`);
-      }
-      if (!detectFileKind(rawFile.name, rawFile.type)) {
-        return badRequest(`"${label}" is an unsupported file type. PDF, DOCX, or TXT only.`);
-      }
-      try {
-        const extracted = await extractFile(rawFile);
-        essays.push({ label, text: extracted.text });
-      } catch (e) {
-        const message = e instanceof Error ? e.message : `Could not read "${label}".`;
-        return badRequest(message);
-      }
-    } else if (typeof rawText === "string") {
-      essays.push({ label, text: rawText });
-    }
-  }
-
   let resumeText: string | null = null;
   let resumeFileName: string | null = null;
   const resumeFile = form.get("resume");
   if (resumeFile instanceof File && resumeFile.size > 0) {
-    if (resumeFile.size > MAX_FILE_BYTES) {
-      return badRequest("Resume file is too large. 8MB max.");
-    }
-    if (!detectFileKind(resumeFile.name, resumeFile.type)) {
-      return badRequest("Unsupported resume file type. PDF, DOCX, or TXT only.");
-    }
     try {
-      const extracted = await extractFile(resumeFile);
-      resumeText = extracted.text;
+      resumeText = await extractUploaded(resumeFile, "Resume");
       resumeFileName = resumeFile.name;
     } catch (e) {
-      const message = e instanceof Error ? e.message : "Could not read the resume.";
-      return badRequest(message);
+      return badRequest(e instanceof Error ? e.message : "Could not read the resume.");
     }
+  }
+
+  const pastAssignmentCount = Number(form.get("pastAssignmentCount") ?? 0);
+  const pastAssignments: PastAssignmentInput[] = [];
+  for (let i = 0; i < pastAssignmentCount; i++) {
+    let text = "";
+    try {
+      text = await readTextOrFile(form, `past_${i}`, `past assignment ${i + 1}`);
+    } catch (e) {
+      return badRequest(e instanceof Error ? e.message : `Could not read past assignment ${i + 1}.`);
+    }
+    pastAssignments.push({
+      text,
+      fileName: null,
+      rubric: String(form.get(`past_rubric_${i}`) ?? ""),
+      feedback: String(form.get(`past_feedback_${i}`) ?? ""),
+      grade: String(form.get(`past_grade_${i}`) ?? ""),
+    });
   }
 
   let exhibit;
   try {
-    exhibit = buildApplicationExhibit({ school, essays, extracurriculars, resumeText, resumeFileName });
+    exhibit = buildEssayExhibit({
+      purpose,
+      prompt,
+      essayText,
+      context,
+      rubric: rubric || null,
+      school,
+      extracurriculars,
+      resumeText,
+      resumeFileName,
+      scholarshipName,
+      pastAssignments,
+    });
   } catch (e) {
-    const message = e instanceof Error ? e.message : "Could not build the application file.";
+    const message = e instanceof Error ? e.message : "Could not build the submission.";
     return badRequest(message);
   }
 
-  const brief = applicationToBrief(exhibit);
+  const brief = essayToBrief(exhibit);
   const client = new Anthropic({ apiKey });
 
   const encoder = new TextEncoder();
@@ -147,7 +170,7 @@ export async function POST(req: NextRequest) {
             client,
             role: "pessimist",
             round,
-            system: PESSIMIST_SYSTEM,
+            system: pessimistSystem(purpose),
             userMessage: buildPessimistUser(brief, round, history),
             send,
           });
@@ -157,7 +180,7 @@ export async function POST(req: NextRequest) {
             client,
             role: "optimist",
             round,
-            system: OPTIMIST_SYSTEM,
+            system: optimistSystem(purpose),
             userMessage: buildOptimistUser(brief, round, history),
             send,
           });
@@ -168,7 +191,7 @@ export async function POST(req: NextRequest) {
           client,
           role: "judge",
           round: ROUNDS + 1,
-          system: JUDGE_SYSTEM,
+          system: judgeSystem(purpose),
           userMessage: buildJudgeUser(brief, history),
           send,
           maxTokens: 900,
@@ -192,6 +215,26 @@ export async function POST(req: NextRequest) {
       "X-Accel-Buffering": "no",
     },
   });
+}
+
+async function extractUploaded(file: File, label: string): Promise<string> {
+  if (file.size > MAX_FILE_BYTES) {
+    throw new Error(`"${label}" is too large. 8MB max.`);
+  }
+  if (!detectFileKind(file.name, file.type)) {
+    throw new Error(`"${label}" is an unsupported file type. PDF, DOCX, or TXT only.`);
+  }
+  const extracted = await extractFile(file);
+  return extracted.text;
+}
+
+async function readTextOrFile(form: FormData, fieldPrefix: string, label: string): Promise<string> {
+  const file = form.get(`${fieldPrefix}_file`);
+  if (file instanceof File && file.size > 0) {
+    return extractUploaded(file, label);
+  }
+  const text = form.get(`${fieldPrefix}_text`);
+  return typeof text === "string" ? text : "";
 }
 
 interface RunAgentArgs {

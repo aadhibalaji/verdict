@@ -1,12 +1,15 @@
 "use client";
 
+import type { Purpose } from "@/lib/essay-evaluation";
+
 interface VerdictRevealProps {
   verdict: { label: string; line: string } | null;
+  purpose: Purpose;
   onReset: () => void;
 }
 
-export default function VerdictReveal({ verdict, onReset }: VerdictRevealProps) {
-  const tone = toneFor(verdict?.label ?? "");
+export default function VerdictReveal({ verdict, purpose, onReset }: VerdictRevealProps) {
+  const tone = toneFor(purpose, verdict?.label ?? "");
 
   return (
     <section className="relative max-w-4xl mx-auto chamber-frame px-6 py-12 sm:px-12 text-center animate-riseIn">
@@ -15,7 +18,7 @@ export default function VerdictReveal({ verdict, onReset }: VerdictRevealProps) 
       <span className="corner-ornament bl" aria-hidden />
       <span className="corner-ornament br" aria-hidden />
 
-      <div className="divider-flourish mb-6">The Verdict on Your Application</div>
+      <div className="divider-flourish mb-6">The Verdict on Your Essay</div>
 
       {verdict ? (
         <>
@@ -31,7 +34,7 @@ export default function VerdictReveal({ verdict, onReset }: VerdictRevealProps) 
         </>
       ) : (
         <p className="font-serif-body italic text-ink-200 text-xl">
-          The Judge declined to issue a formal tier, but the verdict above stands as written.
+          The Judge declined to issue a formal verdict line, but the reasoning above stands as written.
         </p>
       )}
 
@@ -47,10 +50,27 @@ export default function VerdictReveal({ verdict, onReset }: VerdictRevealProps) 
   );
 }
 
-function toneFor(label: string): { text: string } {
+function toneFor(purpose: Purpose, label: string): { text: string } {
   const upper = label.toUpperCase();
-  if (upper.includes("LIKELY")) return { text: "text-verdure-400" };
-  if (upper.includes("TARGET")) return { text: "text-brass-300" };
-  if (upper.includes("REACH")) return { text: "text-blood-400" };
+
+  if (purpose === "college" || purpose === "scholarship") {
+    if (upper.includes("LIKELY")) return { text: "text-verdure-400" };
+    if (upper.includes("TARGET")) return { text: "text-brass-300" };
+    if (upper.includes("REACH")) return { text: "text-blood-400" };
+    return { text: "text-brass-300" };
+  }
+
+  if (purpose === "assignment") {
+    if (upper.startsWith("A")) return { text: "text-verdure-400" };
+    if (upper.startsWith("B")) return { text: "text-brass-300" };
+    if (upper.startsWith("C") || upper.startsWith("D") || upper.startsWith("F")) {
+      return { text: "text-blood-400" };
+    }
+    return { text: "text-brass-300" };
+  }
+
+  if (upper.includes("STRONG")) return { text: "text-verdure-400" };
+  if (upper.includes("PROMISING")) return { text: "text-brass-300" };
+  if (upper.includes("NEEDS WORK")) return { text: "text-blood-400" };
   return { text: "text-brass-300" };
 }
