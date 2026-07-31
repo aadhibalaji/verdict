@@ -175,6 +175,15 @@ export default function EssayForm({ onSubmit }: EssayFormProps) {
       </div>
 
       <div className="space-y-8">
+        <TextField
+          label="Context"
+          hint="Optional — anything not captured elsewhere"
+          value={context}
+          onChange={setContext}
+          placeholder={"e.g. “this is for my AP Lit class” or “applying as a transfer student”"}
+          rows={3}
+        />
+
         <PurposeSelector purpose={purpose} setPurpose={setPurpose} />
 
         <TextField
@@ -198,29 +207,6 @@ export default function EssayForm({ onSubmit }: EssayFormProps) {
             placeholder="Paste the essay text…"
             filePlaceholder="Drop the essay file"
             showWordCount
-          />
-        </section>
-
-        <TextField
-          label="Context"
-          hint="Optional — anything not captured elsewhere"
-          value={context}
-          onChange={setContext}
-          placeholder={"e.g. “this is for my AP Lit class” or “applying as a transfer student”"}
-          rows={3}
-        />
-
-        <section>
-          <SectionHeader label="Rubric" hint="Optional" />
-          <PasteOrFileField
-            mode={rubricMode}
-            setMode={setRubricMode}
-            text={rubricText}
-            setText={setRubricText}
-            file={rubricFile}
-            setFile={setRubricFile}
-            placeholder="Paste the rubric text…"
-            filePlaceholder="Drop the rubric file"
           />
         </section>
 
@@ -262,20 +248,35 @@ export default function EssayForm({ onSubmit }: EssayFormProps) {
         )}
 
         {purpose === "assignment" && (
-          <section>
-            <SectionHeader label="Past Assignments" hint="Optional — helps the court read this professor" />
-            <div className="space-y-4">
-              {pastAssignments.map((pa) => (
-                <PastAssignmentField
-                  key={pa.id}
-                  row={pa}
-                  onChange={(patch) => updatePastAssignment(pa.id, patch)}
-                  onRemove={() => removePastAssignment(pa.id)}
-                />
-              ))}
-            </div>
-            <AddButton label="+ Add a past assignment" onClick={addPastAssignment} />
-          </section>
+          <>
+            <section>
+              <SectionHeader label="Rubric" hint="Optional" />
+              <PasteOrFileField
+                mode={rubricMode}
+                setMode={setRubricMode}
+                text={rubricText}
+                setText={setRubricText}
+                file={rubricFile}
+                setFile={setRubricFile}
+                placeholder="Paste the rubric text…"
+                filePlaceholder="Drop the rubric file"
+              />
+            </section>
+            <section>
+              <SectionHeader label="Past Assignments" hint="Optional — helps the court read this professor" />
+              <div className="space-y-4">
+                {pastAssignments.map((pa) => (
+                  <PastAssignmentField
+                    key={pa.id}
+                    row={pa}
+                    onChange={(patch) => updatePastAssignment(pa.id, patch)}
+                    onRemove={() => removePastAssignment(pa.id)}
+                  />
+                ))}
+              </div>
+              <AddButton label="+ Add a past assignment" onClick={addPastAssignment} />
+            </section>
+          </>
         )}
       </div>
 
