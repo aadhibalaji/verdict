@@ -4,8 +4,8 @@
       "file": "01-robotics-essay.txt",
       "single": {
         "specificity": 8,
-        "actionability": 7,
-        "coverage": 6
+        "actionability": 8,
+        "coverage": 8
       },
       "verdict": {
         "specificity": 9,
@@ -22,7 +22,7 @@
       },
       "verdict": {
         "specificity": 9,
-        "actionability": 8,
+        "actionability": 9,
         "coverage": 8
       }
     },
@@ -30,34 +30,34 @@
       "file": "03-generic-sports-essay.txt",
       "single": {
         "specificity": 8,
-        "actionability": 8,
-        "coverage": 5
+        "actionability": 9,
+        "coverage": 6
       },
       "verdict": {
-        "specificity": 9,
-        "actionability": 9,
-        "coverage": 8
+        "specificity": 8,
+        "actionability": 8,
+        "coverage": 7
       }
     },
     {
       "file": "04-extracurricular-list.txt",
       "single": {
-        "specificity": 3,
-        "actionability": 1,
-        "coverage": 2
+        "specificity": 6,
+        "actionability": 2,
+        "coverage": 3
       },
       "verdict": {
         "specificity": 9,
         "actionability": 9,
-        "coverage": 8
+        "coverage": 9
       }
     },
     {
       "file": "05-baking-essay.txt",
       "single": {
         "specificity": 9,
-        "actionability": 7,
-        "coverage": 8
+        "actionability": 8,
+        "coverage": 9
       },
       "verdict": {
         "specificity": 9,
@@ -68,12 +68,12 @@
   ],
   "overall": {
     "single": {
-      "specificity": 7.4,
-      "actionability": 6.2,
-      "coverage": 6
+      "specificity": 8,
+      "actionability": 7,
+      "coverage": 7
     },
     "verdict": {
-      "specificity": 9,
+      "specificity": 8.8,
       "actionability": 8.6,
       "coverage": 8.2
     }

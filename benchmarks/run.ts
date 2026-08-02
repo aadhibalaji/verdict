@@ -111,10 +111,18 @@ Score each output from 1-10 on these three dimensions:
 Respond with ONLY a JSON object in this exact shape, no other text:
 {"a":{"specificity":N,"actionability":N,"coverage":N},"b":{"specificity":N,"actionability":N,"coverage":N}}`;
 
-  const text = await complete(undefined, prompt, 1000);
-  const jsonMatch = text.match(/\{[\s\S]*\}/);
-  if (!jsonMatch) throw new Error(`Evaluator did not return JSON: ${text}`);
-  return JSON.parse(jsonMatch[0]);
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const text = await complete(undefined, prompt, 1000);
+    const jsonMatch = text.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+      try {
+        return JSON.parse(jsonMatch[0]);
+      } catch {
+        // fall through to retry
+      }
+    }
+  }
+  throw new Error("Evaluator did not return valid JSON after 3 attempts");
 }
 
 interface InputResult {

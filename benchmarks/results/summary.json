@@ -1,0 +1,15 @@
+{
+  "runs_averaged": 5,
+  "overall_average": {
+    "single": {
+      "specificity": 7.88,
+      "actionability": 6.840000000000001,
+      "coverage": 6.88
+    },
+    "verdict": {
+      "specificity": 8.8,
+      "actionability": 8.559999999999999,
+      "coverage": 8.12
+    }
+  }
+}
