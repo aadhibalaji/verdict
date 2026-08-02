@@ -1,0 +1,9 @@
+The first time our robot fell off the table during a demo, I laughed. The second time, I cried. The third time, I rewired the whole balance controller at 1am and it finally stood still.
+
+I joined my school's robotics team as a freshman because my older brother did it, not because I loved engineering. For two years I mostly held the soldering iron for other people. Then junior year, our lead programmer graduated and nobody else wanted to touch the PID loop that controlled our robot's arm. I volunteered because I was bored of being the person who just handed tools to smarter people.
+
+I spent three weekends reading PID tuning guides that were clearly written for people who already understood PID tuning. I broke the arm twice. I emailed a professor at the state university I found through a Google search and, to my surprise, he answered. We went back and forth for a month over email until the arm moved the way I wanted it to.
+
+At our regional competition, the arm worked for exactly four matches before a gear stripped. I spent the elimination round with grease on my hands instead of watching from the stands, and we lost. I was more proud of that loss than any win we'd had before, because for the first time the failure was mine to fix, not something I was watching happen to someone else's code.
+
+I want to study mechanical engineering because I like the version of myself that exists at 1am with a screwdriver and a problem that hasn't given up yet.

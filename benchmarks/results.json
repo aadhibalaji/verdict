@@ -1,0 +1,81 @@
+{
+  "perInput": [
+    {
+      "file": "01-robotics-essay.txt",
+      "single": {
+        "specificity": 8,
+        "actionability": 8,
+        "coverage": 8
+      },
+      "verdict": {
+        "specificity": 9,
+        "actionability": 8,
+        "coverage": 9
+      }
+    },
+    {
+      "file": "02-immigrant-family-essay.txt",
+      "single": {
+        "specificity": 8,
+        "actionability": 7,
+        "coverage": 8
+      },
+      "verdict": {
+        "specificity": 9,
+        "actionability": 9,
+        "coverage": 9
+      }
+    },
+    {
+      "file": "03-generic-sports-essay.txt",
+      "single": {
+        "specificity": 7,
+        "actionability": 8,
+        "coverage": 6
+      },
+      "verdict": {
+        "specificity": 9,
+        "actionability": 9,
+        "coverage": 8
+      }
+    },
+    {
+      "file": "04-extracurricular-list.txt",
+      "single": {
+        "specificity": 1,
+        "actionability": 1,
+        "coverage": 1
+      },
+      "verdict": {
+        "specificity": 9,
+        "actionability": 8,
+        "coverage": 9
+      }
+    },
+    {
+      "file": "05-baking-essay.txt",
+      "single": {
+        "specificity": 8,
+        "actionability": 7,
+        "coverage": 8
+      },
+      "verdict": {
+        "specificity": 9,
+        "actionability": 9,
+        "coverage": 9
+      }
+    }
+  ],
+  "overall": {
+    "single": {
+      "specificity": 6.4,
+      "actionability": 6.2,
+      "coverage": 6.2
+    },
+    "verdict": {
+      "specificity": 9,
+      "actionability": 8.6,
+      "coverage": 8.8
+    }
+  }
+}
