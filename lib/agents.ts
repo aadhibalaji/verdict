@@ -1,6 +1,6 @@
 import type { Purpose } from "./essay-evaluation";
 
-export type AgentRole = "pessimist" | "optimist" | "judge";
+export type AgentRole = "pessimist" | "optimist" | "judge" | "coach";
 
 export interface AgentTurn {
   role: AgentRole;
@@ -130,6 +130,13 @@ Hard rules:
 - Reference at least two specific details from the exhibit or from the debate.
 - Be fair. The writer is a human being, not a case file. Default to leniency in tone unless the evidence is clear.
 - Hand down something memorable — a line they will quote back to themselves at 2am.`;
+}
+
+export const COACH_SYSTEM = `You are THE COACH. You have observed a full debate about this application and the Judge has delivered a verdict. Your only job is to extract the 5 most important, specific, actionable changes the applicant can make before submitting. Be concrete — reference actual details from the application. No opinions, no hedging, no courtroom language. Write directly to the applicant. Number each point 1-5, ordered by impact. 150-250 words total.`;
+
+export function buildCoachUser(brief: string, history: AgentTurn[], verdictLabel: string): string {
+  const transcript = transcriptOf(history);
+  return `${brief}\n\nTHE DEBATE HAS CONCLUDED. THE JUDGE'S VERDICT: ${verdictLabel}\n\nFULL DEBATE TRANSCRIPT (including the Judge's reasoning):\n${transcript}\n\nExtract the 5 most important, specific, actionable edits the applicant should make before submitting. Number them 1-5, ordered by impact.`;
 }
 
 export function buildPessimistUser(brief: string, round: number, prior: AgentTurn[]): string {

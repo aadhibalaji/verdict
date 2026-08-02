@@ -1,20 +1,21 @@
 # Verdict
 
-> Any decision. On trial.
+> Your essay. On trial.
 
-Submit a decision in plain language, or upload a document — PDF, DOCX, or CSV.
-Three AI agents argue it before the bench:
+Submit a college essay, an extracurricular list, a class assignment, or a
+scholarship essay. Four AI agents work the case before the bench:
 
-![Verdict — homepage](public/screenshots/demo.png)
+- **The Pessimist** — prosecution. Finds every flaw, cliché, and weak argument.
+- **The Optimist** — defense. Reframes weaknesses and defends the writer.
+- **The Judge** — delivers a verdict (REACH / TARGET / LIKELY, a letter
+  grade, or a strength tier, depending on the submission's purpose) after
+  three rounds of debate.
+- **The Coach** — reads the full debate and the verdict, then hands the
+  applicant exactly 5 specific, actionable edits to make before submitting.
 
-- **The Pessimist** — prosecution. Finds every flaw, risk, and red flag.
-- **The Optimist** — defense. Reframes the case and defends the human behind it.
-- **The Judge** — delivers a final verdict after three rounds.
-
-Works for anything: life decisions, career moves, contracts, lease agreements,
-academic drafts, financial choices. Built with Next.js 14 (App Router),
-Tailwind, and the Anthropic SDK using `claude-sonnet-4-20250514`.
-Token-by-token streaming straight from the API to the courtroom UI.
+Built with Next.js 14 (App Router), Tailwind, and the Anthropic SDK using
+`claude-sonnet-5`. Token-by-token streaming straight from the API to the
+courtroom UI.
 
 ## Quick start
 
@@ -25,25 +26,26 @@ npm install
 npm run dev
 ```
 
-Open <http://localhost:3000>. Describe a decision in the question box, drop in
-a PDF / DOCX / CSV as supporting evidence, or do both — then convene the court.
+Open <http://localhost:3000>, then go to `/dashboard` to enter the courtroom.
+Paste an essay (or extracurricular list) as text or upload a PDF / DOCX / TXT
+file, pick a purpose, and submit.
 
 ## Environment
 
 | Variable | Required | Purpose |
 | --- | --- | --- |
-| `ANTHROPIC_API_KEY` | yes | Server-side key used by `/api/debate`. Never exposed to the client. |
+| `ANTHROPIC_API_KEY` | yes | Server-side key used by `/api/debate` and `benchmarks/run.ts`. Never exposed to the client. |
 
 ## How it works
 
 ```
-Question + File  ─►  /api/debate (Node runtime)
+Submission (essay/EC text or PDF/DOCX/TXT) ─►  /api/debate (Node runtime)
                           │
-                          ├─ Detect file kind (PDF / DOCX / CSV)
-                          ├─ Extract text via pdf-parse / mammoth / papaparse
-                          ├─ Build a structured Exhibit (situationToBrief)
+                          ├─ Extract file text via pdf-parse / mammoth
+                          ├─ Build a structured Exhibit (essayToBrief)
                           ├─ Stream Pessimist → Optimist  × 3 rounds
-                          └─ Stream Judge with the full transcript
+                          ├─ Stream the Judge with the full transcript
+                          └─ Stream the Coach with the transcript + verdict
                                     │
                                     ▼
                             NDJSON event stream
@@ -58,90 +60,88 @@ The API responds with newline-delimited JSON. Each line is one event:
 
 | `type` | Payload | Meaning |
 | --- | --- | --- |
-| `summary` | `{ exhibit: Exhibit }` | Parsed exhibit (CSV summary or freeform text + question). Sent once at the start. |
-| `turn_start` | `{ role, round }` | A new turn is beginning. |
+| `summary` | `{ exhibit: EssayEvaluationExhibit }` | Parsed exhibit. Sent once at the start. |
+| `turn_start` | `{ role, round }` | A new turn is beginning. `role` is one of `pessimist`, `optimist`, `judge`, `coach`. |
 | `delta` | `{ role, round, text }` | A token chunk for the active turn. |
 | `turn_end` | `{ role, round }` | The current turn has finished. |
-| `done` | `{ verdict: { label, line } \| null }` | All seven turns complete. |
+| `done` | `{ verdict: { label, line } \| null }` | All five turns complete (3 rounds of debate + Judge + Coach). |
 | `error` | `{ message }` | Something went wrong mid-trial. |
 
-The `Exhibit` is a discriminated union:
+### Submission purposes
 
-```ts
-type Exhibit =
-  | { kind: "summary"; summary: StatementSummary; question: string | null; fileName: string }
-  | { kind: "text"; text: string; source: "pdf" | "docx" | "text"; question: string | null; fileName: string | null };
-```
+The purpose changes how the Pessimist, Optimist, and Judge calibrate:
 
-### Input rules
-
-- **Text question** — any plain-language description of the matter. Up to ~8k characters.
-- **File upload** — `.pdf`, `.docx`, or `.csv`. 8 MB max.
-- **Both** — the question becomes EXHIBIT A, the file becomes EXHIBIT B.
-- **Either alone** — works, but the court rewards detail.
-
-### CSV expectations (when uploading a bank statement)
-
-The parser auto-detects common header names:
-
-- **Date** — `date`, `posted`, `posting date`, `transaction date`, …
-- **Description** — `description`, `details`, `memo`, `narration`, `payee`, …
-- **Amount** — either a signed `amount` column, or separate `debit` / `credit`
-  columns. Negative values, parentheses, and `$`/`,` are all handled.
-- **Category** *(optional)* — used as a hint for the briefs.
-
-Only an aggregated brief (top merchants, recurring charges, inflow/outflow,
-etc.) is ever sent to Claude — never the full row dump.
-
-### PDF / DOCX expectations
-
-- PDFs are parsed with `pdf-parse` v2 (pdfjs under the hood). Scanned/image-only
-  PDFs will return no text — paste the relevant content into the question box
-  instead.
-- DOCX files are parsed with `mammoth`'s `extractRawText`.
-- Either way, the extracted text is truncated to ~24k characters before it
-  enters the brief, to keep prompts manageable.
+- **College application** — calibrated to a target school's selectivity;
+  checks the 650-word Common App limit; flags cliché topics; can factor in
+  an extracurricular record and resume.
+- **Class assignment** — calibrated to a specific professor's past grades
+  and feedback, and/or a rubric, if provided.
+- **Scholarship** — calibrated to a named scholarship's likely priorities.
+- **Other** — plain writing-quality assessment, no selectivity framing.
 
 ## Architecture
 
 ```
 app/
   layout.tsx           # Fonts (Cormorant Garamond + Inter + JetBrains Mono)
-  page.tsx             # Hosts <Courtroom />
-  globals.css          # Dark editorial theme, chamber frames, gold ornaments
-  api/debate/route.ts  # Streaming orchestrator
+  page.tsx              # Landing page
+  dashboard/page.tsx     # Hosts <Courtroom />
+  globals.css           # Dark editorial theme, chamber frames, gold ornaments
+  api/debate/route.ts    # Streaming orchestrator (5 agent calls)
 components/
-  Courtroom.tsx        # Top-level state machine + stream reader
-  ExhibitA.tsx         # Renders question + evidence (summary or freeform)
-  AgentBench.tsx       # Pessimist / Optimist panels (with round tickers)
-  JudgeBench.tsx       # Judge panel
-  VerdictReveal.tsx    # Final stamped sentence
-  FileUpload.tsx       # Dual input: question textarea + file drop zone
+  Courtroom.tsx          # Top-level state machine + stream reader
+  ExhibitA.tsx           # Renders the parsed submission
+  EssayForm.tsx          # Purpose picker + text/file inputs
+  AgentBench.tsx         # Pessimist / Optimist panels (with round tickers)
+  JudgeBench.tsx         # Judge panel
+  CoachBench.tsx         # Coach panel (cyan accent, 5-point action plan)
+  VerdictReveal.tsx      # Final stamped verdict
 lib/
-  agents.ts            # Topic-agnostic system prompts + per-turn user prompts
-  csv.ts               # papaparse parser, summarizer, situationToBrief
-  extract.ts           # PDF (pdf-parse) + DOCX (mammoth) extractors
+  agents.ts              # System prompts + per-turn user prompts for all 4 agents
+  essay-evaluation.ts    # Purpose-aware exhibit builder + brief formatter
+  extract.ts             # PDF (pdf-parse) + DOCX (mammoth) extractors
+benchmarks/
+  run.ts                 # Single-Claude vs. Verdict (debate + Coach) benchmark
+  inputs/                # Sample essays / EC lists used by the benchmark
+  results/               # Per-run benchmark output (see Benchmarks below)
 ```
-
-## Verdict criteria
-
-The Judge issues one of three labels:
-
-- **NOT GUILTY** — the decision is sound, risks are manageable, and the case
-  for proceeding is stronger than the case against.
-- **GUILTY WITH MERCY** — real concerns exist but they are fixable; the human
-  behind the decision deserves a chance to address them.
-- **GUILTY** — the decision is clearly harmful, reckless, or has no defensible
-  upside.
 
 ## Notes & limitations
 
-- The page route is server-rendered on demand; the API route runs in the Node
-  runtime so the Anthropic SDK can stream over HTTPS and `pdf-parse` / `mammoth`
-  can read binary buffers.
-- A trial is roughly 7 model calls (3 × 2 + Judge), each capped at ~600 tokens
-  (Judge 900). Expect ~30–60 seconds end-to-end depending on latency.
-- This app is a piece of theater, not legal or financial advice.
+- The API route runs in the Node runtime so the Anthropic SDK can stream
+  over HTTPS and `pdf-parse` / `mammoth` can read binary buffers.
+- A trial is 5 model calls (Pessimist × 3, Optimist × 3 interleaved, Judge,
+  Coach — 8 calls total across the debate rounds plus verdict and coaching).
+  Expect well under a minute end-to-end depending on latency.
+- This app is a piece of theater, not admissions or academic advice.
+
+## Benchmarks
+
+`benchmarks/run.ts` compares a single unstructured Claude call against the
+full Verdict pipeline (debate + Coach) on the same 5 sample submissions in
+`benchmarks/inputs/`. A blind third Claude call scores both outputs 1–10 on
+**specificity**, **actionability**, and **coverage**, without knowing which
+is which.
+
+```bash
+npx ts-node --compiler-options '{"module":"commonjs","moduleResolution":"node"}' benchmarks/run.ts
+```
+
+Because individual LLM-judged runs are noisy, the table below is the average
+of 5 full benchmark runs (`benchmarks/results/run-1.json` … `run-5.json`),
+taken after adding the Coach agent:
+
+| Dimension | Single Claude (avg) | Verdict (avg) | Improvement |
+| --- | --- | --- | --- |
+| Specificity | 7.88 | 8.80 | +12% |
+| Actionability | 6.84 | 8.56 | +25% |
+| Coverage | 6.88 | 8.12 | +18% |
+
+Single Claude wins on raw specificity in some runs, but the full Verdict
+pipeline — debate followed by the Coach's 5-point action plan — consistently
+comes out ahead on actionability and coverage: the courtroom format surfaces
+both strengths and weaknesses, and the Coach turns that debate into concrete
+edits instead of leaving it as rhetoric.
 
 ## Scripts
 

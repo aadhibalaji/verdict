@@ -5,12 +5,13 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { EssayEvaluationExhibit, Purpose } from "@/lib/essay-evaluation";
 
 import AgentBench from "./AgentBench";
+import CoachBench from "./CoachBench";
 import EssayForm, { type EssaySubmission } from "./EssayForm";
 import ExhibitA from "./ExhibitA";
 import JudgeBench from "./JudgeBench";
 import VerdictReveal from "./VerdictReveal";
 
-type Role = "pessimist" | "optimist" | "judge";
+type Role = "pessimist" | "optimist" | "judge" | "coach";
 
 interface TurnState {
   role: Role;
@@ -48,6 +49,7 @@ export default function Courtroom() {
   const pessimistTurns = useMemo(() => turns.filter((t) => t.role === "pessimist"), [turns]);
   const optimistTurns = useMemo(() => turns.filter((t) => t.role === "optimist"), [turns]);
   const judgeTurn = useMemo(() => turns.find((t) => t.role === "judge") ?? null, [turns]);
+  const coachTurn = useMemo(() => turns.find((t) => t.role === "coach") ?? null, [turns]);
 
   useEffect(() => () => abortRef.current?.abort(), []);
 
@@ -305,6 +307,12 @@ export default function Courtroom() {
             turn={judgeTurn}
             isSpeaking={currentRole === "judge"}
             sealed={!judgeTurn && phase !== "verdict"}
+          />
+
+          <CoachBench
+            turn={coachTurn}
+            isSpeaking={currentRole === "coach"}
+            sealed={!coachTurn && phase !== "verdict"}
           />
 
           {phase === "verdict" && (

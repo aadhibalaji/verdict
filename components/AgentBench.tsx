@@ -3,7 +3,7 @@
 import { useEffect, useRef } from "react";
 
 interface TurnState {
-  role: "pessimist" | "optimist" | "judge";
+  role: "pessimist" | "optimist" | "judge" | "coach";
   round: number;
   text: string;
   done: boolean;

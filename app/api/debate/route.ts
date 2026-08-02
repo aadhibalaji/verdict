@@ -2,9 +2,11 @@ import Anthropic from "@anthropic-ai/sdk";
 import { NextRequest } from "next/server";
 
 import {
+  buildCoachUser,
   buildJudgeUser,
   buildOptimistUser,
   buildPessimistUser,
+  COACH_SYSTEM,
   judgeSystem,
   optimistSystem,
   pessimistSystem,
@@ -196,8 +198,21 @@ export async function POST(req: NextRequest) {
           send,
           maxTokens: 900,
         });
+        history.push({ role: "judge", round: ROUNDS + 1, text: judgeText });
 
-        send({ type: "done", verdict: extractVerdict(judgeText) });
+        const verdict = extractVerdict(judgeText);
+
+        await runAgent({
+          client,
+          role: "coach",
+          round: ROUNDS + 2,
+          system: COACH_SYSTEM,
+          userMessage: buildCoachUser(brief, history, verdict?.label ?? "no formal verdict"),
+          send,
+          maxTokens: 700,
+        });
+
+        send({ type: "done", verdict });
       } catch (err) {
         const message = err instanceof Error ? err.message : "Unknown error during the debate.";
         send({ type: "error", message });
